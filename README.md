@@ -145,7 +145,7 @@ stores work.)
 
 ## Semantics worth knowing
 
-- **Immutable** — every transformation returns a new instance.
+- **Immutable** — transformations never mutate; they always return a result, never modify one in place.
 - **Structural equality** — `Result::success(1) == Result::success(1)` is `true`.
 - **Sealed** — `Success` and `Failure` are final; `isSuccess() === false` always
   means `Failure`.

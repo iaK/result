@@ -133,3 +133,10 @@ function neverOnWrongVariant(): void
 
     assertType('never', $failure->value());
 }
+
+function neverOnSuccessSide(): void
+{
+    $success = Result::success(new Receipt);
+
+    assertType('never', $success->error());
+}

@@ -123,7 +123,7 @@ final class ResultException extends RuntimeException
 ### Immutability, equality, serialization
 
 - `Success`/`Failure` are `final` with `readonly` payloads; all classes annotated
-  `@immutable`. Combinators always return new instances. No mutation API exists.
+  `@immutable`. Combinators never mutate; no-op paths may return the same instance. No mutation API exists.
 - Structural equality via PHP `==` works out of the box
   (`Result::success(1) == Result::success(1)`); documented, no code needed.
 - Default PHP serialization works whenever `T`/`E` are serializable. Required for
