@@ -79,4 +79,9 @@ final class Failure extends Result
     {
         return $fn($this->error);
     }
+
+    public function match(callable $success, callable $failure): mixed
+    {
+        return $failure($this->error);
+    }
 }

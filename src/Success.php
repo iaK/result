@@ -79,4 +79,9 @@ final class Success extends Result
     {
         return $this;
     }
+
+    public function match(callable $success, callable $failure): mixed
+    {
+        return $success($this->value);
+    }
 }

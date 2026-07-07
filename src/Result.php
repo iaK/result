@@ -155,4 +155,16 @@ abstract class Result
      * @return Result<T|U, F>
      */
     abstract public function orElse(callable $fn): Result;
+
+    /**
+     * Handle both variants and return the outcome of the matching arm.
+     *
+     * @template TSuccessReturn
+     * @template TFailureReturn
+     *
+     * @param  callable(T): TSuccessReturn  $success
+     * @param  callable(E): TFailureReturn  $failure
+     * @return TSuccessReturn|TFailureReturn
+     */
+    abstract public function match(callable $success, callable $failure): mixed;
 }
