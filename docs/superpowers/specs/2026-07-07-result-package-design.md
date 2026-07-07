@@ -166,8 +166,10 @@ Two layers, matching the package's two promises:
 1. **Behavior (Pest ^3):** every method on both variants; `ResultException` message,
    `->value`, and `$previous` chaining; equality; serialization round-trip; an
    architecture test (pest-plugin-arch) pinning `final` classes and strict types.
-2. **Type inference (PHPStan `TypeInferenceTestCase`):** fixture files asserting via
-   `PHPStan\Testing\assertType()`:
+2. **Type inference:** fixture files under `types/` asserting via
+   `PHPStan\Testing\assertType()`, verified by PHPStan during **regular analysis**
+   (`types/` is included in the phpstan.neon paths, so `composer analyse` checks the
+   assertions — no `TypeInferenceTestCase` harness needed):
    - `Result::success(1)` is `Success<int>`; `Result::success()` is `Success<null>`;
      `Result::failure($e)` is `Failure<PaymentError>`
    - narrowing after `isSuccess()`/`isFailure()`/`instanceof`
@@ -178,7 +180,8 @@ Two layers, matching the package's two promises:
 
 ## Tooling & CI
 
-- PHPStan **level 9** over `src/`, plain `phpstan/phpstan` (no larastan), **no baseline**.
+- PHPStan **level 9** over `src/` and `types/`, plain `phpstan/phpstan` `^2.1`
+  (2.1+ fixes `@phpstan-assert-if-true` on `$this` in abstract classes), **no baseline**.
 - Pest ^3, Laravel Pint, `composer analyse` / `test` / `format` scripts (matching
   `iak/action` conventions).
 - GitHub Actions: test + analyse matrix on PHP 8.2 / 8.3 / 8.4.
