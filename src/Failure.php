@@ -69,4 +69,14 @@ final class Failure extends Result
     {
         return new Failure($fn($this->error));
     }
+
+    public function chain(callable $fn): Result
+    {
+        return $this;
+    }
+
+    public function orElse(callable $fn): Result
+    {
+        return $fn($this->error);
+    }
 }

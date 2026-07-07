@@ -69,4 +69,14 @@ final class Success extends Result
     {
         return $this;
     }
+
+    public function chain(callable $fn): Result
+    {
+        return $fn($this->value);
+    }
+
+    public function orElse(callable $fn): Result
+    {
+        return $this;
+    }
 }

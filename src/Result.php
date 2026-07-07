@@ -131,4 +131,28 @@ abstract class Result
      * @return Result<T, F>
      */
     abstract public function mapError(callable $fn): Result;
+
+    /**
+     * Chain another result-returning operation on the success value; a
+     * failure short-circuits past it. Error types accumulate as a union.
+     *
+     * @template U
+     * @template F
+     *
+     * @param  callable(T): Result<U, F>  $fn
+     * @return Result<U, E|F>
+     */
+    abstract public function chain(callable $fn): Result;
+
+    /**
+     * Recover from a failure with another result-returning operation; a
+     * success passes through untouched.
+     *
+     * @template U
+     * @template F
+     *
+     * @param  callable(E): Result<U, F>  $fn
+     * @return Result<T|U, F>
+     */
+    abstract public function orElse(callable $fn): Result;
 }
