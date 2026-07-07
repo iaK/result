@@ -1,19 +1,20 @@
 # iak/result — Design
 
 **Date:** 2026-07-07
-**Status:** Approved
+**Status:** Approved (naming revised after review — see Decision 6)
 
 ## Purpose
 
-A Rust-inspired `Result<T, E>` type for PHP, published as `iak/result`. Failures become
-values instead of exceptions: a function that can fail returns `Result<T, E>` and the
-caller is forced — by PHPStan at level 9 — to handle both variants. The flagship use
-case is actions built on `iak/action` returning `Result` from `handle()`.
+A Result type for PHP, published as `iak/result`, with Rust-inspired *semantics* and
+PHP-natural *naming*. Failures become values instead of exceptions: a function that can
+fail returns `Result<T, E>` and the caller is forced — by PHPStan at level 9 — to
+handle both variants. The flagship use case is actions built on `iak/action` returning
+`Result` from `handle()`.
 
 ## Decisions (settled during brainstorming)
 
 1. **Error side `E` is unconstrained** — enums, value objects, strings, or Throwables.
-   True Rust semantics; domain errors do not have to be exception classes.
+   Domain errors do not have to be exception classes.
 2. **Result-native integration only** — no exception-catching bridge (`Result::try()`,
    `Tryable` trait) is shipped. The convention is: fallible actions return `Result`
    from `handle()`. Integration with `iak/action` is documentation, not code.
@@ -21,8 +22,26 @@ case is actions built on `iak/action` returning `Result` from `handle()`.
    `inspect`/`and`/`or`/`mapOr`/`flatten`; easy to add later if needed.
 4. **Pure PHP package** — `require: { "php": "^8.2" }` only. No illuminate
    dependencies, no service provider. Works in any PHP project, including Laravel.
-5. **Architecture: sealed hierarchy** — abstract `Result<T, E>` with final `Ok<T>` and
-   `Err<E>` subclasses, covariant templates, `never` for the absent side.
+5. **Architecture: sealed hierarchy** — abstract `Result<T, E>` with final variant
+   subclasses, covariant templates, `never` for the absent side.
+6. **Naming: PHP-natural vocabulary, not Rust's** (revised from the original Rust
+   names after review):
+   - Variants are `Success`/`Failure`; payloads are `value`/`error`. Rule: methods
+     about the *variant* use Success/Failure words (`isSuccess()`, `isFailure()`),
+     methods about the *payload* use value/error words (`value()`, `error()`,
+     `valueOr()`, `mapError()`).
+   - The chaining method is **`chain()`**, not `then()`: promise libraries
+     (Guzzle — and therefore Laravel `Http::async()`/`Http::pool()` — and ReactPHP)
+     duck-type any object with a public `then()` method as a thenable and try to
+     assimilate it, which would hang or TypeError on a Result. Not `andThen()` since
+     the Rust vocabulary was dropped.
+   - The variant class is `Failure`, not `Error`: `use Iak\Result\Error` would
+     silently shadow PHP's built-in `\Error` in `catch`/`instanceof` within the
+     importing file.
+   - The instance extractor cannot be named `failure()` because the static
+     constructor `Result::failure()` occupies that name (PHP cannot declare both);
+     hence the payload extractor is `error()`.
+   - The exception is `ResultException` (no method named "unwrap" exists anymore).
 
 ## Package identity
 
@@ -36,52 +55,53 @@ case is actions built on `iak/action` returning `Result` from `handle()`.
 ```
 src/
   Result.php           abstract base; @template-covariant T, @template-covariant E, @immutable
-  Ok.php               final; @extends Result<T, never>; readonly payload
-  Err.php              final; @extends Result<never, E>; readonly payload
-  UnwrapException.php  final; extends RuntimeException; the only exception the package throws
+  Success.php          final; @extends Result<T, never>; readonly payload
+  Failure.php          final; @extends Result<never, E>; readonly payload
+  ResultException.php  final; extends RuntimeException; the only exception the package throws
 ```
 
 Key type-level mechanics:
 
-- **Covariance + `never`:** `Ok<T>` extends `Result<T, never>` and `Err<E>` extends
-  `Result<never, E>`. With covariant templates, `Result::ok($receipt)` satisfies
-  `@return Result<Receipt, PaymentError>` for any `E` (and symmetrically for `Err`).
-  Userland never needs casts or `@var` annotations.
-- **Narrowing:** `isOk()` carries `@phpstan-assert-if-true Ok<T> $this` and
-  `@phpstan-assert-if-false Err<E> $this` (mirrored on `isErr()`). After a check,
-  `unwrap()` is provably safe. `instanceof Ok` / `instanceof Err` also narrows.
-- **`never` returns:** `Err::unwrap()` and `Ok::unwrapErr()` (and the corresponding
-  `expect*`) are declared `: never` natively — PHP allows narrowing `mixed` to `never`
-  in overrides, and PHPStan then treats code after them as dead.
-- Constructors: `Result::ok()` / `Result::err()` static factories; `new Ok(...)` /
-  `new Err(...)` remain public and equivalent.
+- **Covariance + `never`:** `Success<T>` extends `Result<T, never>` and `Failure<E>`
+  extends `Result<never, E>`. With covariant templates, `Result::success($receipt)`
+  satisfies `@return Result<Receipt, PaymentError>` for any `E` (and symmetrically for
+  `Failure`). Userland never needs casts or `@var` annotations.
+- **Narrowing:** `isSuccess()` carries `@phpstan-assert-if-true Success<T> $this` and
+  `@phpstan-assert-if-false Failure<E> $this` (mirrored on `isFailure()`). After a
+  check, `value()` is provably safe. `instanceof Success` / `instanceof Failure` also
+  narrows.
+- **`never` returns:** `Failure::value()` and `Success::error()` (and the
+  corresponding `expect*`) are declared `: never` natively — PHP allows narrowing
+  `mixed` to `never` in overrides, and PHPStan then treats code after them as dead.
+- Constructors: `Result::success()` / `Result::failure()` static factories;
+  `new Success(...)` / `new Failure(...)` remain public and equivalent.
 
 ## API surface (complete)
 
 | Method | Type-level signature | Behavior |
 |---|---|---|
-| `Result::ok($value = null)` | `static<TOk>(TOk = null): Ok<TOk>` | Omitted arg → `Ok<null>` (unit case). |
-| `Result::err($error)` | `static<TErr>(TErr): Err<TErr>` | |
-| `isOk()` | `(): bool` + assert-if-true `Ok<T>`, assert-if-false `Err<E>` | |
-| `isErr()` | `(): bool` + mirrored assertions | |
-| `unwrap()` | `(): T`; on `Err`: `(): never` | Throws `UnwrapException` on `Err`. |
-| `unwrapErr()` | `(): E`; on `Ok`: `(): never` | Throws `UnwrapException` on `Ok`. |
-| `expect(string $message)` | `(): T`; on `Err`: `(): never` | Throws with the caller's message. |
-| `expectErr(string $message)` | `(): E`; on `Ok`: `(): never` | Throws with the caller's message. |
-| `unwrapOr($default)` | `<TDefault>(TDefault): T\|TDefault` | |
-| `unwrapOrElse($fn)` | `<TDefault>(callable(E): TDefault): T\|TDefault` | Lazy; receives the error value. |
-| `map($fn)` | `<U>(callable(T): U): Result<U, E>` | No-op on `Err`. |
-| `mapErr($fn)` | `<F>(callable(E): F): Result<T, F>` | No-op on `Ok`. |
-| `andThen($fn)` | `<U, F>(callable(T): Result<U, F>): Result<U, E\|F>` | Chaining primitive; error types accumulate as a union. |
+| `Result::success($value = null)` | `static<TVal>(TVal = null): Success<TVal>` | Omitted arg → `Success<null>` (unit case). |
+| `Result::failure($error)` | `static<TErr>(TErr): Failure<TErr>` | |
+| `isSuccess()` | `(): bool` + assert-if-true `Success<T>`, assert-if-false `Failure<E>` | |
+| `isFailure()` | `(): bool` + mirrored assertions | |
+| `value()` | `(): T`; on `Failure`: `(): never` | Throws `ResultException` on `Failure`. |
+| `error()` | `(): E`; on `Success`: `(): never` | Throws `ResultException` on `Success`. |
+| `expect(string $message)` | `(): T`; on `Failure`: `(): never` | Throws with the caller's message. |
+| `expectError(string $message)` | `(): E`; on `Success`: `(): never` | Throws with the caller's message. |
+| `valueOr($default)` | `<TDefault>(TDefault): T\|TDefault` | |
+| `valueOrElse($fn)` | `<TDefault>(callable(E): TDefault): T\|TDefault` | Lazy; receives the error value. |
+| `map($fn)` | `<U>(callable(T): U): Result<U, E>` | No-op on `Failure`. |
+| `mapError($fn)` | `<F>(callable(E): F): Result<T, F>` | No-op on `Success`. |
+| `chain($fn)` | `<U, F>(callable(T): Result<U, F>): Result<U, E\|F>` | Chaining primitive; error types accumulate as a union. Named `chain` to avoid promise thenable duck-typing (see Decision 6). |
 | `orElse($fn)` | `<U, F>(callable(E): Result<U, F>): Result<T\|U, F>` | Recovery. |
-| `match($ok, $err)` | `<A, B>(callable(T): A, callable(E): B): A\|B` | Named args encouraged (`ok:`, `err:`). `match` is a legal method name in PHP 8. |
+| `match($success, $failure)` | `<A, B>(callable(T): A, callable(E): B): A\|B` | Named args encouraged (`success:`, `failure:`). `match` is a legal method name in PHP 8. |
 
 ## Runtime semantics
 
-### UnwrapException
+### ResultException
 
 ```php
-final class UnwrapException extends RuntimeException
+final class ResultException extends RuntimeException
 {
     public function __construct(
         string $message,
@@ -92,18 +112,18 @@ final class UnwrapException extends RuntimeException
 ```
 
 - Messages include a short debug rendering of the contained value: enum case name
-  (`PaymentError::CardExpired`), object class name, or scalar value — the Rust
-  panic-message equivalent.
+  (`PaymentError::CardExpired`), object class name, or scalar value.
 - When the contained value is a `Throwable`, it is chained as `$previous`, preserving
   stack traces even though `E` is unconstrained.
-- `expect()`/`expectErr()` use the caller's message; the value still rides on `->value`.
+- `expect()`/`expectError()` use the caller's message; the value still rides on
+  `->value`.
 
 ### Immutability, equality, serialization
 
-- `Ok`/`Err` are `final` with `readonly` payloads; all classes annotated `@immutable`.
-  Combinators always return new instances. No mutation API exists.
+- `Success`/`Failure` are `final` with `readonly` payloads; all classes annotated
+  `@immutable`. Combinators always return new instances. No mutation API exists.
 - Structural equality via PHP `==` works out of the box
-  (`Result::ok(1) == Result::ok(1)`); documented, no code needed.
+  (`Result::success(1) == Result::success(1)`); documented, no code needed.
 - Default PHP serialization works whenever `T`/`E` are serializable. Required for
   `iak/action`'s `idempotent()` on persistent stores.
 
@@ -120,22 +140,22 @@ class ChargeCustomer extends Action
     public function handle(Order $order): Result
     {
         if ($order->cardExpired()) {
-            return Result::err(PaymentError::CardExpired);
+            return Result::failure(PaymentError::CardExpired);
         }
 
-        return Result::ok($this->gateway->charge($order));
+        return Result::success($this->gateway->charge($order));
     }
 }
 ```
 
-2. **Chaining actions** — `andThen` pipelines with error-union accumulation ending in
-   an exhaustive `match`.
+2. **Chaining actions** — `chain()` pipelines with error-union accumulation ending in
+   an exhaustive `match(success:, failure:)`.
 3. **Testing** — `iak/action`'s `Testable<TAction>` mirrors `handle()`, so
    `ChargeCustomer::test()->handle($order)` is typed `Result<Receipt, PaymentError>`
    with no extra work.
-4. **Idempotency caveat** — for `idempotent()`, an `Err` return is a *successful* run:
-   the key is consumed and the `Err` is cached and replayed. Callers wanting
-   retry-on-error semantics should call `forgetIdempotency()` on the `Err` branch.
+4. **Idempotency caveat** — for `idempotent()`, a `Failure` return is a *successful*
+   run: the key is consumed and the `Failure` is cached and replayed. Callers wanting
+   retry-on-error semantics should call `forgetIdempotency()` on the `Failure` branch.
 
 No dependency on `iak/action`, not even in `require-dev`.
 
@@ -143,17 +163,18 @@ No dependency on `iak/action`, not even in `require-dev`.
 
 Two layers, matching the package's two promises:
 
-1. **Behavior (Pest ^3):** every method on both variants; `UnwrapException` message,
+1. **Behavior (Pest ^3):** every method on both variants; `ResultException` message,
    `->value`, and `$previous` chaining; equality; serialization round-trip; an
    architecture test (pest-plugin-arch) pinning `final` classes and strict types.
 2. **Type inference (PHPStan `TypeInferenceTestCase`):** fixture files asserting via
    `PHPStan\Testing\assertType()`:
-   - `Result::ok(1)` is `Ok<int>`; `Result::ok()` is `Ok<null>`; `Result::err($e)` is `Err<PaymentError>`
-   - narrowing after `isOk()`/`isErr()`/`instanceof`
-   - covariant assignment: `Ok<Receipt>` assignable to `Result<Receipt, PaymentError>`
-   - `andThen` error-union: `Result<U, E|F>`
-   - `unwrapOr`/`unwrapOrElse` producing `T|TDefault`
-   - `never` returns making post-`unwrap()` code dead on `Err`
+   - `Result::success(1)` is `Success<int>`; `Result::success()` is `Success<null>`;
+     `Result::failure($e)` is `Failure<PaymentError>`
+   - narrowing after `isSuccess()`/`isFailure()`/`instanceof`
+   - covariant assignment: `Success<Receipt>` assignable to `Result<Receipt, PaymentError>`
+   - `chain()` error-union: `Result<U, E|F>`
+   - `valueOr`/`valueOrElse` producing `T|TDefault`
+   - `never` returns making post-`value()` code dead on `Failure`
 
 ## Tooling & CI
 
@@ -166,6 +187,6 @@ Two layers, matching the package's two promises:
 
 - `Option<T>` type
 - Exception-catching bridge (`Result::try()`, `Tryable` trait)
-- Extended combinators (`inspect`, `and`, `or`, `mapOr`, `mapOrElse`, `flatten`, `isOkAnd`, …)
+- Extended combinators (`inspect`, `and`, `or`, `mapOr`, `mapOrElse`, `flatten`, …)
 - Laravel service provider, Collection macros, response helpers
 - A custom PHPStan extension (the design deliberately needs none)
