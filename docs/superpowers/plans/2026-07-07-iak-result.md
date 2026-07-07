@@ -1458,15 +1458,10 @@ function narrowing(bool $flag): void
         assertType('Iak\Result\Types\Receipt', $again->value());
     }
 
-    $third = charge($flag);
-
-    if ($third instanceof Success) {
-        assertType('Iak\Result\Types\Receipt', $third->value());
-    }
-
-    if ($third instanceof Failure) {
-        assertType('Iak\Result\Types\PaymentError', $third->error());
-    }
+    // NOTE: bare `instanceof Success` narrows only the class, not the
+    // payload generics (PHPStan engine limitation, verified on 2.2.5).
+    // Use isSuccess()/isFailure(), whose @phpstan-assert tags carry T
+    // and E through — asserted above.
 }
 
 function combinators(bool $flag): void
@@ -1627,7 +1622,10 @@ if ($result->isFailure()) {
 $order = $result->value(); // Success<Order> here — cannot throw
 ```
 
-`instanceof Iak\Result\Success` / `instanceof Iak\Result\Failure` narrows too.
+Narrow with `isSuccess()`/`isFailure()`. A bare `instanceof` identifies the variant,
+but PHPStan cannot carry the payload type through it (engine limitation) — so
+`$result->error()` after `instanceof Failure` types as `mixed`, while after
+`isFailure()` it types as `E` exactly.
 
 ## Extracting
 

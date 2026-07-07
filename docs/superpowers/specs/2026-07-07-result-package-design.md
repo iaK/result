@@ -68,8 +68,10 @@ Key type-level mechanics:
   `Failure`). Userland never needs casts or `@var` annotations.
 - **Narrowing:** `isSuccess()` carries `@phpstan-assert-if-true Success<T> $this` and
   `@phpstan-assert-if-false Failure<E> $this` (mirrored on `isFailure()`). After a
-  check, `value()` is provably safe. `instanceof Success` / `instanceof Failure` also
-  narrows.
+  check, `value()` is provably safe. Note: bare `instanceof Success`/`instanceof
+  Failure` identifies the variant but PHPStan does not carry the payload generics
+  through it (engine limitation, verified against PHPStan 2.2.5) — the methods are
+  the supported narrowing mechanism, and the docs steer users to them.
 - **`never` returns:** `Failure::value()` and `Success::error()` (and the
   corresponding `expect*`) are declared `: never` natively — PHP allows narrowing
   `mixed` to `never` in overrides, and PHPStan then treats code after them as dead.
@@ -172,7 +174,7 @@ Two layers, matching the package's two promises:
    assertions — no `TypeInferenceTestCase` harness needed):
    - `Result::success(1)` is `Success<int>`; `Result::success()` is `Success<null>`;
      `Result::failure($e)` is `Failure<PaymentError>`
-   - narrowing after `isSuccess()`/`isFailure()`/`instanceof`
+   - narrowing after `isSuccess()`/`isFailure()`
    - covariant assignment: `Success<Receipt>` assignable to `Result<Receipt, PaymentError>`
    - `chain()` error-union: `Result<U, E|F>`
    - `valueOr`/`valueOrElse` producing `T|TDefault`
