@@ -73,4 +73,42 @@ abstract class Result
      * @throws ResultException on a success result
      */
     abstract public function error(): mixed;
+
+    /**
+     * The success value, or throw with the caller's message on failure.
+     *
+     * @return T
+     *
+     * @throws ResultException on a failure result
+     */
+    abstract public function expect(string $message): mixed;
+
+    /**
+     * The error value, or throw with the caller's message on success.
+     *
+     * @return E
+     *
+     * @throws ResultException on a success result
+     */
+    abstract public function expectError(string $message): mixed;
+
+    /**
+     * The success value, or the given default on failure.
+     *
+     * @template TDefault
+     *
+     * @param  TDefault  $default
+     * @return T|TDefault
+     */
+    abstract public function valueOr(mixed $default): mixed;
+
+    /**
+     * The success value, or the fallback's return value on failure.
+     *
+     * @template TDefault
+     *
+     * @param  callable(E): TDefault  $fallback
+     * @return T|TDefault
+     */
+    abstract public function valueOrElse(callable $fallback): mixed;
 }

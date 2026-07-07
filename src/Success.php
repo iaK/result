@@ -39,4 +39,24 @@ final class Success extends Result
     {
         throw ResultException::describing('Cannot get the error of a success result', $this->value);
     }
+
+    public function expect(string $message): mixed
+    {
+        return $this->value;
+    }
+
+    public function expectError(string $message): never
+    {
+        throw ResultException::withMessage($message, $this->value);
+    }
+
+    public function valueOr(mixed $default): mixed
+    {
+        return $this->value;
+    }
+
+    public function valueOrElse(callable $fallback): mixed
+    {
+        return $this->value;
+    }
 }

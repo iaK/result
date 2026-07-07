@@ -39,4 +39,24 @@ final class Failure extends Result
     {
         return $this->error;
     }
+
+    public function expect(string $message): never
+    {
+        throw ResultException::withMessage($message, $this->error);
+    }
+
+    public function expectError(string $message): mixed
+    {
+        return $this->error;
+    }
+
+    public function valueOr(mixed $default): mixed
+    {
+        return $default;
+    }
+
+    public function valueOrElse(callable $fallback): mixed
+    {
+        return $fallback($this->error);
+    }
 }
