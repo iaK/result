@@ -1,0 +1,45 @@
+{
+    "name": "iak/result",
+    "description": "A fully typed Result object for PHP — Rust-inspired semantics with PHP-natural naming",
+    "keywords": ["php", "result", "result-type", "error-handling", "phpstan"],
+    "homepage": "https://github.com/iaK/result",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Isak Berglind",
+            "email": "isak@berglind.dev",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.2"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.14",
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-arch": "^3.0",
+        "phpstan/phpstan": "^2.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Iak\\Result\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Iak\\Result\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "analyse": "vendor/bin/phpstan analyse",
+        "test": "vendor/bin/pest",
+        "format": "vendor/bin/pint"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable"
+}
