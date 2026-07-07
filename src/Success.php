@@ -59,4 +59,14 @@ final class Success extends Result
     {
         return $this->value;
     }
+
+    public function map(callable $fn): Result
+    {
+        return new Success($fn($this->value));
+    }
+
+    public function mapError(callable $fn): Result
+    {
+        return $this;
+    }
 }

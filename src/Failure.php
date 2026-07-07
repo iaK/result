@@ -59,4 +59,14 @@ final class Failure extends Result
     {
         return $fallback($this->error);
     }
+
+    public function map(callable $fn): Result
+    {
+        return $this;
+    }
+
+    public function mapError(callable $fn): Result
+    {
+        return new Failure($fn($this->error));
+    }
 }

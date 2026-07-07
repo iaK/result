@@ -111,4 +111,24 @@ abstract class Result
      * @return T|TDefault
      */
     abstract public function valueOrElse(callable $fallback): mixed;
+
+    /**
+     * Transform the success value, leaving a failure untouched.
+     *
+     * @template U
+     *
+     * @param  callable(T): U  $fn
+     * @return Result<U, E>
+     */
+    abstract public function map(callable $fn): Result;
+
+    /**
+     * Transform the error value, leaving a success untouched.
+     *
+     * @template F
+     *
+     * @param  callable(E): F  $fn
+     * @return Result<T, F>
+     */
+    abstract public function mapError(callable $fn): Result;
 }
