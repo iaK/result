@@ -1,66 +1,56 @@
 # Result
 
-A return type for operations that can fail.
-
-Instead of throwing exceptions for outcomes you expect — the card is expired, the
-item is out of stock — you return them. The failure becomes part of the method's
-signature, the caller has to deal with it, and your IDE and static analyser know
-both outcomes at every step.
-
-## Before and after
-
-You're placing an order. It can fail three ways: the kitchen is closed, an item
-is out of stock, the address is outside the delivery zone.
-
-### Before — exceptions
+A `Result` is a return type for operations that can fail. Instead of throwing an
+exception for an outcome you fully expect — an expired card, an empty stock, a
+closed kitchen — you return it. For example, check out the following code:
 
 ```php
-class PlaceOrder
-{
-    // The signature promises an Order. The three ways this fails
-    // are invisible unless you read the whole method.
-    public function handle(Cart $cart, Address $address): Order
-    {
-        if (! $this->kitchen->isOpen()) {
-            throw new KitchenClosedException();
-        }
-
-        if (! $cart->allItemsAvailable()) {
-            throw new OutOfStockException($cart->unavailableItems());
-        }
-
-        if (! $this->zones->covers($address)) {
-            throw new DeliveryUnavailableException($address);
-        }
-
-        return Order::create($cart, $address);
-    }
-}
+return $placeOrder->handle($cart, $address)
+    ->chain(fn (Order $order) => $charge->handle($order, $card))
+    ->match(
+        success: fn (Receipt $receipt) => response()->json($receipt),
+        failure: fn (OrderError|PaymentError $error) => response()->json(['error' => $error->message()], 422),
+    );
 ```
+
+Two operations that can each fail, one place where failure is handled, and not a
+try/catch in sight. Every possible outcome is right there in the types — your IDE
+sees them, your static analyser sees them, and the next developer sees them.
+
+## Installation
+
+```bash
+composer require iak/result
+```
+
+That's it. Results require PHP 8.2+ and nothing else — no framework, no
+configuration, no service provider.
+
+## Your First Result
+
+Let's build something real: placing an order. You've probably written this
+controller a hundred times:
 
 ```php
-public function store(StoreOrderRequest $request, PlaceOrder $placeOrder)
-{
-    try {
-        $order = $placeOrder->handle($request->cart(), $request->address());
-    } catch (KitchenClosedException) {
-        return back()->withErrors(['order' => 'The kitchen is closed right now.']);
-    } catch (OutOfStockException) {
-        return back()->withErrors(['order' => 'Some items are out of stock.']);
-    } catch (DeliveryUnavailableException) {
-        return back()->withErrors(['order' => "We don't deliver to this address yet."]);
-    }
-
-    return redirect()->route('orders.show', $order);
+try {
+    $order = $placeOrder->handle($request->cart(), $request->address());
+} catch (KitchenClosedException) {
+    return back()->withErrors(['order' => 'The kitchen is closed right now.']);
+} catch (OutOfStockException) {
+    return back()->withErrors(['order' => 'Some items are out of stock.']);
+} catch (DeliveryUnavailableException) {
+    return back()->withErrors(['order' => "We don't deliver to this address yet."]);
 }
+
+return redirect()->route('orders.show', $order);
 ```
 
-Three exception classes to write and maintain. Nothing checks that the caller
-catches them — forget one (or add a fourth failure mode next month) and the
-customer gets a 500. And every caller has to *know* what to catch, because the
-signature won't tell them.
+It works — until someone adds a fourth failure mode to `PlaceOrder` and this
+controller quietly starts responding with 500s. Nothing in `handle()`'s signature
+says what it throws, and nothing checks that you caught it all.
 
-### After — results
+Let's rebuild it with a Result. First, give every failure a name. An enum is
+perfect for this, and it gives the error messages a home too:
 
 ```php
 enum OrderError
@@ -78,6 +68,12 @@ enum OrderError
         };
     }
 }
+```
+
+Next, instead of throwing, return the outcome — either way:
+
+```php
+use Iak\Result\Result;
 
 class PlaceOrder
 {
@@ -101,6 +97,11 @@ class PlaceOrder
 }
 ```
 
+Notice the docblock: `Result<Order, OrderError>`. That one line now documents
+every way this operation can end. No source-diving, no tribal knowledge.
+
+Finally, the controller shrinks to a single expression:
+
 ```php
 public function store(StoreOrderRequest $request, PlaceOrder $placeOrder)
 {
@@ -111,182 +112,212 @@ public function store(StoreOrderRequest $request, PlaceOrder $placeOrder)
 }
 ```
 
-The signature now declares every outcome. One enum replaces three exception
-classes, and the error messages live next to the errors. The failure path can't
-be forgotten — there is no way to get the `Order` out without going through the
-result. And when you add a fourth failure mode, the enum's own `match` tells you
-exactly which handlers need updating.
+> [!NOTE]
+> **Where did the try/catch go?** There's nothing to catch — failure is just a
+> return value now. And unlike a catch block, `match()` can't be forgotten: it's
+> the only way to get at the order, and it requires both arms.
 
-### Before and after — a multi-step flow
+And when someone adds that fourth failure mode? They add an enum case, the
+`match` inside `message()` immediately demands a message for it, and every
+consumer of the error gets flagged by static analysis. The failure mode is born
+handled.
 
-Failures compose. Where exceptions force a try/catch per step:
+That's the whole pattern. Everything else in this package is convenience on top
+of it.
 
-```php
-try {
-    $order = $placeOrder->handle($cart, $address);
-} catch (OrderException $e) {
-    return response()->json(['error' => $e->getMessage()], 422);
-}
+## Available Methods
 
-try {
-    $receipt = $chargeCustomer->handle($order, $card);
-} catch (PaymentException $e) {
-    return response()->json(['error' => $e->getMessage()], 422);
-}
+[all](#all) · [chain](#chain) · [error](#error) · [expect](#expect) ·
+[expectError](#experror) · [failure](#failure) · [isFailure](#isfailure) ·
+[isSuccess](#issuccess) · [map](#map) · [mapError](#maperror) · [match](#match) ·
+[orElse](#orelse) · [success](#success) · [tap](#tap) · [tapError](#taperror) ·
+[value](#value) · [valueOr](#valueor) · [valueOrElse](#valueorelse)
 
-return response()->json($receipt);
-```
+## Method Listing
 
-…results chain, and the first failure falls through to a single handler:
+<a name="success"></a>
+### `success()`
 
-```php
-return $placeOrder->handle($cart, $address)
-    ->chain(fn (Order $order) => $chargeCustomer->handle($order, $card))
-    ->match(
-        success: fn (Receipt $receipt) => response()->json($receipt),
-        failure: fn (OrderError|PaymentError $error) => response()->json(['error' => $error->message()], 422),
-    );
-```
-
-## Installation
-
-```bash
-composer require iak/result
-```
-
-Requires PHP 8.2+. No dependencies — works in any PHP project, Laravel or not.
-
-## API
-
-### Creating results
-
-#### `Result::success($value = null)`
-
-The operation worked, here's the outcome. Call it without arguments when there's
-nothing meaningful to return:
+The static `success` method wraps a value in a successful result:
 
 ```php
-return Result::success($order);   // Result holding an Order
-return Result::success();         // "it worked" — holds null
+return Result::success($order);
 ```
 
-#### `Result::failure($error)`
+You may call it without arguments when the operation has nothing meaningful to
+return — "it worked" is the whole message:
 
-The operation failed, here's why. The error can be **any value** — an enum for a
-fixed set of outcomes, a value object when the caller needs context, a string, or
-an exception if you already have one:
+```php
+return Result::success();
+```
+
+<a name="failure"></a>
+### `failure()`
+
+The static `failure` method wraps an error in a failed result. The error may be
+anything: an enum, a value object carrying context, a string, or an exception if
+you already have one:
 
 ```php
 return Result::failure(OrderError::OutOfStock);
-return Result::failure(new ValidationErrors($messages));
+return Result::failure(new AddressOutsideZone($address, $nearestZone));
 return Result::failure($caughtException);
 ```
 
-#### `Result::all($results)`
+<a name="all"></a>
+### `all()`
 
-Combine a collection of results into one. All successes → one success holding
-every value, keys preserved. Any failure → the first failure, returned as-is.
-Accepts any iterable and stops consuming it at the first failure.
+The static `all` method combines a collection of results into a single result.
+If every result succeeded, you get one success holding all the values with their
+keys preserved. If any failed, you get the first failure back, untouched:
 
 ```php
 $result = Result::all([
     'order'   => $placeOrder->handle($cart, $address),
     'invoice' => $createInvoice->handle($cart),
 ]);
-// success: ['order' => Order, 'invoice' => Invoice] — or the first failure
+
+// success: ['order' => Order, 'invoice' => Invoice]
+// failure: whichever failed first
 ```
 
-### Checking the outcome
+You may pass any iterable. Iteration stops at the first failure, so a lazy
+generator won't do more work than necessary.
 
-#### `isSuccess()` / `isFailure()`
+<a name="issuccess"></a>
+### `isSuccess()`
 
-Guard-style handling, when `match()` would be too heavy or you want an early
-return. After the check, extracting is safe — and static analysers know it:
+The `isSuccess` method determines whether the operation succeeded:
+
+```php
+if ($result->isSuccess()) {
+    $order = $result->value(); // safe — and your static analyser agrees
+}
+```
+
+<a name="isfailure"></a>
+### `isFailure()`
+
+The `isFailure` method is the mirror of [`isSuccess`](#issuccess). It shines in
+guard clauses, keeping the happy path flat:
 
 ```php
 if ($result->isFailure()) {
     return back()->withErrors(['order' => $result->error()->message()]);
 }
 
-$order = $result->value(); // guaranteed — no exception possible here
+$order = $result->value();
 ```
 
-### Getting the value out
+> [!NOTE]
+> Prefer these methods over `instanceof` checks. Static analysers can't carry
+> the value and error types through a bare `instanceof`, but `isSuccess()` and
+> `isFailure()` keep them intact.
 
-#### `value()`
+<a name="value"></a>
+### `value()`
 
-The success value. On a failure it throws `ResultException`, so use it after a
-guard (see above) — or unguarded as a deliberate assertion: "this can't fail
-here, blame me if it does."
+The `value` method returns the success value:
 
 ```php
 $order = $result->value();
 ```
 
-#### `error()`
+If the result is a failure, `value` throws a `ResultException`. An unguarded
+call is therefore an assertion — "this can't fail here, and if I'm wrong I want
+to hear about it." When you're not asserting, guard with
+[`isFailure`](#isfailure) first or reach for [`valueOr`](#valueor).
 
-The mirror image: the error value, throwing `ResultException` on a success.
-Mostly used after an `isFailure()` guard, and in tests:
+<a name="error"></a>
+### `error()`
+
+The `error` method returns the error value, throwing a `ResultException` if the
+result is actually a success. You'll use it after a guard, and all over your
+tests:
 
 ```php
 expect($result->error())->toBe(OrderError::OutOfStock);
 ```
 
-#### `valueOr($default)`
+<a name="expect"></a>
+### `expect()`
 
-The value, or a fixed fallback when it failed. For when you don't care *why* it
-failed:
+The `expect` method works like [`value`](#value), but the exception carries your
+message — so when the impossible happens, whoever's on call knows what you were
+assuming:
 
 ```php
-$eta = $estimateDelivery->handle($address)->valueOr(45); // minutes
+$order = $result->expect('cart was validated in the previous step');
 ```
 
-#### `valueOrElse($fallback)`
+<a name="experror"></a>
+### `expectError()`
 
-Like `valueOr()`, but the fallback is computed from the error — and only when
-actually needed:
+The `expectError` method is [`expect`](#expect) for the error side:
+
+```php
+$error = $result->expectError('the gateway was stubbed to fail in this test');
+```
+
+<a name="valueor"></a>
+### `valueOr()`
+
+The `valueOr` method returns the success value, or your fallback if the
+operation failed — for when you don't care why:
+
+```php
+$eta = $estimateDelivery->handle($address)->valueOr(45);
+```
+
+<a name="valueorelse"></a>
+### `valueOrElse()`
+
+The `valueOrElse` method computes the fallback from the error, and only when
+it's actually needed:
 
 ```php
 $eta = $estimateDelivery->handle($address)
     ->valueOrElse(fn (EstimateError $error) => $error->conservativeGuess());
 ```
 
-#### `expect($message)` / `expectError($message)`
+<a name="map"></a>
+### `map()`
 
-Like `value()`/`error()`, but the exception carries *your* message — useful when
-the assertion deserves an explanation for whoever hits it later:
-
-```php
-$order = $result->expect('cart was validated in the previous step');
-```
-
-### Transforming
-
-#### `map($fn)`
-
-Transform the success value without unpacking the result. A failure passes
-through untouched:
+The `map` method transforms the success value without unpacking the result. A
+failure passes through untouched:
 
 ```php
 $result->map(fn (Order $order) => $order->total);
-// Result<Order, OrderError> → Result<Money, OrderError>
+// Result<Order, OrderError> becomes Result<Money, OrderError>
 ```
 
-#### `mapError($fn)`
+<a name="maperror"></a>
+### `mapError()`
 
-Transform the error — typically to translate a low-level error into your
-domain's language at a boundary:
+The `mapError` method transforms the error instead. It's the tool for
+translating low-level errors into your domain's language at a boundary:
 
 ```php
 $gateway->charge($card)
     ->mapError(fn (GatewayError $error) => PaymentError::fromGateway($error));
 ```
 
-#### `tap($fn)` / `tapError($fn)`
+<a name="tap"></a>
+### `tap()`
 
-Run a side effect — logging, metrics, notifications — without touching the
-result. The result flows through unchanged, and the callback only runs for its
-variant:
+The `tap` method runs a side effect on the success value — logging, metrics,
+notifications — and hands the result back unchanged:
+
+```php
+return $placeOrder->handle($cart, $address)
+    ->tap(fn (Order $order) => Log::info('order placed', ['id' => $order->id]));
+```
+
+<a name="taperror"></a>
+### `tapError()`
+
+The `tapError` method does the same for the failure side. Together they let you
+observe a pipeline without interrupting it:
 
 ```php
 return $placeOrder->handle($cart, $address)
@@ -294,41 +325,47 @@ return $placeOrder->handle($cart, $address)
     ->tapError(fn (OrderError $error) => Metrics::increment('orders.rejected'));
 ```
 
-### Chaining fallible steps
+<a name="chain"></a>
+### `chain()`
 
-#### `chain($fn)`
-
-Pipe the success value into the next operation that can itself fail. The first
-failure short-circuits everything after it. Error types accumulate, so the final
-handler is forced to know about every step's failure modes:
+The `chain` method pipes the success value into the next operation that can
+itself fail. The first failure short-circuits everything after it, so a whole
+workflow needs exactly one failure handler:
 
 ```php
-return $placeOrder->handle($cart, $address)                          // Result<Order, OrderError>
-    ->chain(fn (Order $order) => $charge->handle($order, $card))     // Result<Receipt, OrderError|PaymentError>
-    ->chain(fn (Receipt $receipt) => $notify->handle($receipt));     // Result<null, OrderError|PaymentError|NotifyError>
+return $placeOrder->handle($cart, $address)                       // Result<Order, OrderError>
+    ->chain(fn (Order $order) => $charge->handle($order, $card))  // Result<Receipt, OrderError|PaymentError>
+    ->match(
+        success: fn (Receipt $receipt) => response()->json($receipt),
+        failure: fn (OrderError|PaymentError $error) => response()->json(['error' => $error->message()], 422),
+    );
 ```
 
-> Why `chain()` and not `then()`? Promise libraries (Guzzle — and therefore
-> Laravel's `Http::async()` — and ReactPHP) treat any object with a public
+Notice how the error types stack up: add a step, and every handler downstream is
+made aware of what it might have to deal with.
+
+> [!NOTE]
+> **Why isn't this called `then()`?** Promise libraries — Guzzle, and therefore
+> Laravel's `Http::async()`, and ReactPHP — treat any object with a public
 > `then()` method as a promise and try to resolve it. A Result named that way
-> would break inside promise pipelines.
+> would break inside promise pipelines, so it's `chain()`.
 
-#### `orElse($fn)`
+<a name="orelse"></a>
+### `orElse()`
 
-The recovery counterpart: on failure, try something else that can itself succeed
-or fail. A success passes through untouched:
+The `orElse` method is recovery: on failure, try something else that can itself
+succeed or fail. A success passes straight through:
 
 ```php
 $receipt = $chargeCard->handle($order, $card)
     ->orElse(fn (PaymentError $error) => $chargeWallet->handle($order));
 ```
 
-### Handling both outcomes
+<a name="match"></a>
+### `match()`
 
-#### `match($success, $failure)`
-
-Handle both variants in one expression. Both arms are required, so the failure
-path can't be forgotten:
+The `match` method handles both outcomes in one expression. Both arms are
+required — the failure path can't be forgotten:
 
 ```php
 return $result->match(
@@ -337,22 +374,58 @@ return $result->match(
 );
 ```
 
-## Good to know
+## Handling Different Error Types
 
-- **`ResultException`** — the only exception the package throws (from `value()`,
-  `error()`, `expect()`, `expectError()` on the wrong variant). It carries the
-  offending value on `->value`, and when the error is itself a `Throwable`, it's
-  chained as `->getPrevious()` so stack traces survive.
-- **Immutable** — transformations never mutate; they always return a result,
-  never modify one in place.
-- **Structural equality** — `Result::success(1) == Result::success(1)` is `true`.
-- **Serializable** — a result serializes cleanly as long as the contained value
-  does, so it survives caches and queues.
-- **Sealed** — `Success` and `Failure` are final; `isFailure() === false` always
-  means success.
-- **Prefer `isSuccess()`/`isFailure()` over `instanceof`** — static analysers
-  can't carry the value/error types through a bare `instanceof`, but the methods
-  keep them intact.
+Once you start chaining, the error side becomes a union — `OrderError|PaymentError`
+— and you may want to treat them differently. PHP's own `match` has you covered:
+
+```php
+$result->match(
+    success: fn (Receipt $receipt) => response()->json($receipt),
+    failure: fn (OrderError|PaymentError $error) => match (true) {
+        $error instanceof OrderError   => back()->withErrors(['order' => $error->message()]),
+        $error instanceof PaymentError => $this->redirectToPaymentRetry($error),
+    },
+);
+```
+
+Static analysers check that inner `match` against the union — add a third error
+type to the chain and this exact spot gets flagged until you handle it.
+
+If every error is handled the same way, skip the dispatch entirely and give your
+errors a shared interface:
+
+```php
+interface DomainError
+{
+    public function message(): string;
+}
+
+// enum OrderError implements DomainError { ... }
+// enum PaymentError implements DomainError { ... }
+
+failure: fn (DomainError $error) => back()->withErrors(['order' => $error->message()]),
+```
+
+And when a union grows past comfort, normalize early: use
+[`mapError`](#maperror) at each boundary so downstream code only ever sees one
+error type.
+
+## Good to Know
+
+- **Results are immutable.** Transformations never modify a result in place —
+  they hand you a new one (or the same one, untouched).
+- **Results compare structurally.** `Result::success(1) == Result::success(1)`
+  is `true`.
+- **Results serialize.** As long as the contained value serializes, a result
+  survives caches and queues.
+- **Results are sealed.** `Success` and `Failure` are final, so
+  `isFailure() === false` always means success.
+- **`ResultException` is the only exception this package throws** — from
+  [`value`](#value), [`error`](#error), [`expect`](#expect) and
+  [`expectError`](#experror) on the wrong variant. It carries the offending
+  value on `->value`, and when the error is itself a `Throwable`, you'll find it
+  chained on `->getPrevious()` with its stack trace intact.
 
 ## Development
 
