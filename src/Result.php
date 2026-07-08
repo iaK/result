@@ -43,6 +43,32 @@ abstract class Result
     }
 
     /**
+     * Combine many results into one: a success holding every value (keys
+     * preserved) when all succeed, or the first failure encountered.
+     *
+     * @template TKey of array-key
+     * @template TVal
+     * @template TErr
+     *
+     * @param  iterable<TKey, Result<TVal, TErr>>  $results
+     * @return Result<array<TKey, TVal>, TErr>
+     */
+    public static function all(iterable $results): Result
+    {
+        $values = [];
+
+        foreach ($results as $key => $result) {
+            if ($result->isFailure()) {
+                return $result;
+            }
+
+            $values[$key] = $result->value();
+        }
+
+        return new Success($values);
+    }
+
+    /**
      * @phpstan-assert-if-true Success<T> $this
      *
      * @phpstan-assert-if-false Failure<E> $this
@@ -155,6 +181,22 @@ abstract class Result
      * @return Result<T|U, F>
      */
     abstract public function orElse(callable $fn): Result;
+
+    /**
+     * Run a side effect on the success value, returning the result untouched.
+     *
+     * @param  callable(T): void  $fn
+     * @return $this
+     */
+    abstract public function tap(callable $fn): static;
+
+    /**
+     * Run a side effect on the error value, returning the result untouched.
+     *
+     * @param  callable(E): void  $fn
+     * @return $this
+     */
+    abstract public function tapError(callable $fn): static;
 
     /**
      * Handle both variants and return the outcome of the matching arm.

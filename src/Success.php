@@ -80,6 +80,18 @@ final class Success extends Result
         return $this;
     }
 
+    public function tap(callable $fn): static
+    {
+        $fn($this->value);
+
+        return $this;
+    }
+
+    public function tapError(callable $fn): static
+    {
+        return $this;
+    }
+
     public function match(callable $success, callable $failure): mixed
     {
         return $success($this->value);

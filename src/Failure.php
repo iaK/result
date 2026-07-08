@@ -80,6 +80,18 @@ final class Failure extends Result
         return $fn($this->error);
     }
 
+    public function tap(callable $fn): static
+    {
+        return $this;
+    }
+
+    public function tapError(callable $fn): static
+    {
+        $fn($this->error);
+
+        return $this;
+    }
+
     public function match(callable $success, callable $failure): mixed
     {
         return $failure($this->error);

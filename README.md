@@ -83,6 +83,11 @@ error is a `Throwable`). Reserve it for cases you are asserting cannot fail.
 $result->map(fn (Order $order) => $order->total);        // Result<Money, E>
 $result->mapError(fn (GatewayError $e) => PaymentError::fromGateway($e));
 
+// tap()/tapError() run side effects — logging, metrics — without
+// touching the result; the type flows through unchanged:
+$result->tap(fn (Order $order) => Log::info('created', ['id' => $order->id]))
+    ->tapError(fn (OrderError $e) => report($e));
+
 // chain() pipes the success value into the next fallible step; the first
 // failure short-circuits the rest. Error types accumulate as a union:
 CreateOrder::make()->handle($cart)                                  // Result<Order, ValidationError>
@@ -98,6 +103,20 @@ CreateOrder::make()->handle($cart)                                  // Result<Or
 > Laravel's `Http::async()`/`Http::pool()` — and ReactPHP) treat any object with a
 > public `then()` method as a promise and try to resolve it. A Result named that way
 > would hang or crash promise pipelines.
+
+## Combining many results
+
+`Result::all()` turns a collection of results into one: a success holding every
+value (keys preserved) when all succeed, or the first failure — returned as-is —
+when any fails. It accepts any iterable and stops consuming it at the first failure.
+
+```php
+$result = Result::all([
+    'order'   => CreateOrder::make()->handle($cart),   // Result<Order, ValidationError>
+    'invoice' => CreateInvoice::make()->handle($cart), // Result<Invoice, InvoiceError>
+]);
+// Result<array<string, Order|Invoice>, ValidationError|InvoiceError>
+```
 
 ## Use with [iak/action](https://github.com/iaK/action)
 

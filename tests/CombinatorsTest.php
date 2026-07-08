@@ -99,3 +99,51 @@ it('orElse passes a success through without invoking the callback', function () 
 
     expect($result->value())->toBe(42)->and($called)->toBeFalse();
 });
+
+it('tap runs the side effect with the value on success and returns the same instance', function () {
+    $seen = null;
+
+    $result = Result::success(42);
+    $returned = $result->tap(function (int $value) use (&$seen) {
+        $seen = $value;
+    });
+
+    expect($seen)->toBe(42)
+        ->and($returned)->toBe($result);
+});
+
+it('tap does not invoke the side effect on failure', function () {
+    $called = false;
+
+    $result = Result::failure('nope');
+    $returned = $result->tap(function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()
+        ->and($returned)->toBe($result);
+});
+
+it('tapError runs the side effect with the error on failure and returns the same instance', function () {
+    $seen = null;
+
+    $result = Result::failure(TestError::CardExpired);
+    $returned = $result->tapError(function (TestError $error) use (&$seen) {
+        $seen = $error;
+    });
+
+    expect($seen)->toBe(TestError::CardExpired)
+        ->and($returned)->toBe($result);
+});
+
+it('tapError does not invoke the side effect on success', function () {
+    $called = false;
+
+    $result = Result::success(42);
+    $returned = $result->tapError(function () use (&$called) {
+        $called = true;
+    });
+
+    expect($called)->toBeFalse()
+        ->and($returned)->toBe($result);
+});

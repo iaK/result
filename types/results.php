@@ -140,3 +140,36 @@ function neverOnSuccessSide(): void
 
     assertType('never', $success->error());
 }
+
+function sideEffects(bool $flag): void
+{
+    $result = charge($flag);
+
+    assertType(
+        'Iak\Result\Result<Iak\Result\Types\Receipt, Iak\Result\Types\PaymentError>',
+        $result->tap(function (Receipt $receipt): void {}),
+    );
+
+    assertType(
+        'Iak\Result\Result<Iak\Result\Types\Receipt, Iak\Result\Types\PaymentError>',
+        $result->tapError(function (PaymentError $error): void {}),
+    );
+
+    assertType(
+        'Iak\Result\Success<Iak\Result\Types\Receipt>',
+        Result::success(new Receipt)->tap(function (Receipt $receipt): void {}),
+    );
+}
+
+function combining(bool $flag): void
+{
+    assertType(
+        'Iak\Result\Result<array<int, Iak\Result\Types\Receipt>, Iak\Result\Types\PaymentError>',
+        Result::all([charge($flag), charge($flag)]),
+    );
+
+    assertType(
+        'Iak\Result\Result<array<string, Iak\Result\Types\Receipt>, Iak\Result\Types\PaymentError>',
+        Result::all(['a' => charge($flag), 'b' => charge($flag)]),
+    );
+}
