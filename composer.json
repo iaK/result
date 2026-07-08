@@ -1,6 +1,6 @@
 {
     "name": "iak/result",
-    "description": "A fully typed Result object for PHP — Rust-inspired semantics with PHP-natural naming",
+    "description": "A return type for operations that can fail — make every failure visible, typed, and impossible to ignore",
     "keywords": ["php", "result", "result-type", "error-handling", "phpstan"],
     "homepage": "https://github.com/iaK/result",
     "license": "MIT",
