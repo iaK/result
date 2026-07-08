@@ -337,30 +337,6 @@ return $result->match(
 );
 ```
 
-## Use with [iak/action](https://github.com/iaK/action)
-
-Actions that can fail return a `Result` from `handle()` — like `PlaceOrder`
-above. Testing needs no extra wiring: `PlaceOrder::test()->handle($cart, $address)`
-mirrors `handle()` and is typed `Result<Order, OrderError>` automatically.
-
-**Idempotency caveat:** for `->idempotent($key)`, a returned failure is a
-*successful* run — the key is consumed and the failure is cached and replayed on
-subsequent calls. If you want a failed outcome to be retryable, forget the key on
-the failure branch:
-
-```php
-$result = ChargeCustomer::make()
-    ->idempotent("charge:{$order->id}")
-    ->run(fn (ChargeCustomer $action) => $action->handle($order));
-
-if ($result->isFailure()) {
-    ChargeCustomer::make()->forgetIdempotency("charge:{$order->id}");
-}
-```
-
-(Results serialize cleanly as long as the contained value does, so persistent cache
-stores work.)
-
 ## Good to know
 
 - **`ResultException`** — the only exception the package throws (from `value()`,
@@ -370,6 +346,8 @@ stores work.)
 - **Immutable** — transformations never mutate; they always return a result,
   never modify one in place.
 - **Structural equality** — `Result::success(1) == Result::success(1)` is `true`.
+- **Serializable** — a result serializes cleanly as long as the contained value
+  does, so it survives caches and queues.
 - **Sealed** — `Success` and `Failure` are final; `isFailure() === false` always
   means success.
 - **Prefer `isSuccess()`/`isFailure()` over `instanceof`** — static analysers
