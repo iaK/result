@@ -26,3 +26,5 @@ jobs:
       - run: vendor/bin/pest
 
       - run: vendor/bin/phpstan analyse --no-progress
+
+      - run: vendor/bin/pint --test
