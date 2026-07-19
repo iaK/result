@@ -1,5 +1,10 @@
 # Result
 
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/iak/result.svg?style=flat-square)](https://packagist.org/packages/iak/result)
+[![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/iaK/result/tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/iaK/result/actions?query=workflow%3ATests+branch%3Amain)
+[![GitHub Code Style Action Status](https://img.shields.io/github/actions/workflow/status/iaK/result/fix-php-code-style-issues.yml?branch=main&label=code%20style&style=flat-square)](https://github.com/iaK/result/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
+[![Total Downloads](https://img.shields.io/packagist/dt/iak/result.svg?style=flat-square)](https://packagist.org/packages/iak/result)
+
 A `Result` is a return type for operations that can fail. Instead of throwing an
 exception for an outcome you fully expect — an expired card, an empty stock, a
 closed kitchen — you return it. For example, check out the following code:
